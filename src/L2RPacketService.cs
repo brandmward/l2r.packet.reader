@@ -12,6 +12,13 @@ namespace Kamael.Packets
     /// </summary>
     public partial class L2RPacketService
     {
+        private FixedSizeQueue<ushort> _packetIdQueue = new FixedSizeQueue<ushort>(10);
+
+        private bool _triggerEvent;
+
+        /// <summary>
+        /// The device to capture packets from.
+        /// </summary>
         public ICaptureDevice Device { get; set; }
 
         // A few variable used throughout the program
@@ -367,17 +374,36 @@ namespace Kamael.Packets
                     PacketFactory factory = new ConcretePacketFactory();
                     IL2RPacket l2rpckt = factory.GetPacket(packetId, packetReader);
 
-                    //FIRE L2RPacketArrivalEvent
-                    L2RPacketArrivalEventArgs args = new L2RPacketArrivalEventArgs
+                    /*** Fixed Queue ***/
+
+                    _triggerEvent = true;
+
+                    foreach (var id in _packetIdQueue)
                     {
-                        ID = packetId,
-                        Packet = l2rpckt,
-                        PacketBytes = packetBytes
-                    };
+                        if (id == packetId)
+                        {
+                            _triggerEvent = false;
+                        }
+                    }
 
-                    OnL2RPacketArrival(args);
+                    _packetIdQueue.Enqueue(packetId);
 
-                    packetQue.Enqueue(l2rpckt);
+                    if (_triggerEvent)
+                    {
+                        //FIRE L2RPacketArrivalEvent
+                        L2RPacketArrivalEventArgs args = new L2RPacketArrivalEventArgs
+                        {
+                            ID = packetId,
+                            Packet = l2rpckt,
+                            PacketBytes = packetBytes
+                        };
+
+                        OnL2RPacketArrival(args);
+
+                        //packetQue.Enqueue(l2rpckt);
+                    }
+
+                    /*** end Fixed Queue ***/
                 }
             }
             catch (Exception ex)
